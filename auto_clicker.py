@@ -22,6 +22,10 @@ import psutil
 import subprocess
 import pyperclip
 from win32com.client import Dispatch
+from dotenv import load_dotenv
+
+# Thêm dòng này để chỉ rõ file .env ở cùng thư mục script
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env.gitignore"))
 
 def get_resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
@@ -38,8 +42,8 @@ CONFIG_FILE = get_config_path()
 VALID_USERNAME = "huydeptrai"
 VALID_PASSWORD = "10022000"
 
-DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "MTM3NjAwNTQwMTQ1MTAzNjcyMg.G7lBXW.g3Lr30vt2Qc1Vie4HHFxKtj36vFPY766y-JP6Y")
-if not DISCORD_BOT_TOKEN or DISCORD_BOT_TOKEN == "YOUR_ACTUAL_DISCORD_TOKEN":
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+if not DISCORD_BOT_TOKEN:
     raise ValueError("⚠️ DISCORD_BOT_TOKEN missing! Set it before running.")
 
 DISCORD_USER_ID = None
