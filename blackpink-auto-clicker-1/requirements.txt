@@ -1,0 +1,7 @@
+PyQt5
+discord.py
+pyscreeze
+pyperclip
+keyboard
+psutil
+pywin32
