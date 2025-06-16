@@ -887,16 +887,7 @@ class AutoClickerApp(QWidget):
     def auto_click(self):
         import re
         last_queue_number = None
-        number_file = os.path.join(os.path.expanduser("~"), "Documents", "number.txt")
         first_number_sent = False
-
-        # Load số cũ từ file nếu có
-        if os.path.exists(number_file):
-            try:
-                with open(number_file, "r", encoding="utf-8") as f:
-                    last_queue_number = f.read().strip()
-            except Exception:
-                last_queue_number = None
 
         while self.running:
             # Nếu đã vào được thành phố thì dừng
@@ -912,21 +903,16 @@ class AutoClickerApp(QWidget):
             # Ưu tiên kiểm tra nút đóng trước
             loc_dong = pag.locateCenterOnScreen(get_resource_path("images/dong.png"), grayscale=True, confidence=0.85)
             if loc_dong:
-                try:
-                    t_start = time.perf_counter()
-                    queue_number = double_click_and_copy_number()  # <-- Gọi hàm mới
-                    if queue_number and queue_number != last_queue_number:
-                        with open(number_file, "w") as f:
-                            f.write(queue_number)
-                        now_str = time.strftime("%Y-%m-%d %H:%M:%S")
-                        if not first_number_sent:
-                            send_discord(f"Số thứ tự của bạn là: {queue_number} ({now_str[-8:]})", icon="🚦")
-                            first_number_sent = True
-                        else:
-                            send_discord(f"Số thứ tự của bạn là: {queue_number}", icon="🚦")
-                        last_queue_number = queue_number
-                except Exception as e:
-                    print(f"Copy number error: {e}")
+                t_start = time.perf_counter()
+                queue_number = double_click_and_copy_number()
+                if queue_number and queue_number != last_queue_number:
+                    now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+                    if not first_number_sent:
+                        send_discord(f"Số thứ tự của bạn là: {queue_number} ({now_str[-8:]})", icon="🚦")
+                        first_number_sent = True
+                    else:
+                        send_discord(f"Số thứ tự của bạn là: {queue_number}", icon="🚦")
+                    last_queue_number = queue_number
 
                 pag.click(loc_dong)  # Bấm đóng
                 t_end = time.perf_counter()
@@ -939,16 +925,19 @@ class AutoClickerApp(QWidget):
 
                 timeout_val = max(0, timeout_val - elapsed)
                 if timeout_val > 0:
-                    for i in range(int(timeout_val), 0, -1):
-                        if not self.running:
-                            self.set_countdown(-1)
-                            return
-                        self.set_countdown(i)
-                        time.sleep(1)
-                    self.set_countdown(-1)
-                    frac = timeout_val - int(timeout_val)
-                    if frac > 0 and self.running:
-                        time.sleep(frac)
+                    if timeout_val < 1:
+                        time.sleep(timeout_val)
+                    else:
+                        for i in range(int(timeout_val), 0, -1):
+                            if not self.running:
+                                self.set_countdown(-1)
+                                return
+                            self.set_countdown(i)
+                            time.sleep(1)
+                        self.set_countdown(-1)
+                        frac = timeout_val - int(timeout_val)
+                        if frac > 0 and self.running:
+                            time.sleep(frac)
                 else:
                     self.set_countdown(-1)
                 continue
@@ -961,7 +950,7 @@ class AutoClickerApp(QWidget):
                 continue
 
             # Nếu không có gì, sleep ngắn rồi lặp lại
-            time.sleep(0.05)
+            time.sleep(0.01)  # Giảm thời gian chờ
 
     def detect_stop_image(self):
         while self.detecting:
@@ -1174,18 +1163,18 @@ def double_click_and_copy_number():
     global number_length
 
     def try_get_number():
-        time.sleep(0.05)
+        time.sleep(0.01)  # Giảm thời gian chờ
         pag.hotkey('ctrl', 'c')
-        time.sleep(0.05)
+        time.sleep(0.01)
         copied = pyperclip.paste()
         match = re.search(r"\d{1,4}", copied)
         return match.group() if match else None
 
     def get_coord(length):
         if length == 2:
-            return (1007, 730)
+            return (1005, 730)
         elif length == 4:
-            return (1011, 730)
+            return (1015, 730)
         else:
             return (1009, 730)
 
@@ -1200,32 +1189,25 @@ def double_click_and_copy_number():
     coord = get_coord(number_length)
     fail_count = 0
 
-    while True:
+    for _ in range(2):  # Chỉ thử lại tối đa 2 lần
         pag.doubleClick(*coord)
         number = try_get_number()
-        # Đóng popup (nếu có)
-        loc_dong = pag.locateCenterOnScreen(get_resource_path("images/dong.png"), grayscale=True, confidence=0.85)
-        if loc_dong:
-            pag.click(loc_dong)
         if number:
-            # Nếu lấy được số, reset fail_count và tiếp tục dùng tọa độ này cho lần sau
-            fail_count = 0
             return number
-        else:
-            fail_count += 1
-            if fail_count >= 3:
-                # Đủ 3 lần không lấy được số, đo lại độ dài và lấy tọa độ mới
-                pag.doubleClick(951, 730)
-                number = try_get_number()
-                if number:
-                    number_length = len(number)
-                    coord = get_coord(number_length)
-                    fail_count = 0
-                else:
-                    # Nếu vẫn không đo được, tiếp tục thử lại
-                    number_length = None
-                    coord = get_coord(0)
-                    fail_count = 0
+        fail_count += 1
+
+    # Nếu vẫn không lấy được, đo lại độ dài
+    pag.doubleClick(951, 730)
+    number = try_get_number()
+    if number:
+        number_length = len(number)
+        coord = get_coord(number_length)
+        pag.doubleClick(*coord)
+        number = try_get_number()
+        if number:
+            return number
+    number_length = None
+    return None
 
 if __name__ == "__main__":
     threading.Thread(target=start_discord_bot, daemon=True).start()
