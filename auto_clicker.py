@@ -7,7 +7,7 @@ import pyautogui as pag
 import pyscreeze
 import discord
 import asyncio
-from discord.ext import commands
+from discord import app_commands
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QLineEdit, QMessageBox,
     QGroupBox, QHBoxLayout, QFileDialog, QCheckBox, QToolButton, QGraphicsOpacityEffect,
@@ -50,47 +50,50 @@ DISCORD_USER_ID = None
 
 intents = discord.Intents.default()
 intents.dm_messages = True
-bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
+client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
 
-@bot.event
+@client.event
 async def on_ready():
-    print(f"✅ Bot is online as {bot.user}")
+    print(f"✅ Bot is online as {client.user}")
+    try:
+        await tree.sync()
+        print("✅ Slash commands synced globally.")
+    except Exception as e:
+        print(f"❌ Slash command sync failed: {e}")
 
 async def send_private_message(message):
     global DISCORD_USER_ID
     if DISCORD_USER_ID is None:
         print("⚠️ No Discord User ID set.")
         return
-    user = await bot.fetch_user(int(DISCORD_USER_ID))
+    user = await client.fetch_user(int(DISCORD_USER_ID))
     if user:
         await user.send(message)
         print(f"📢 Sent DM: {message}")
 
-
-@bot.command()
-async def notify(ctx, id: str, *, message: str):
+@tree.command(name="notify", description="Gửi tin nhắn tới user hoặc channel theo ID")
+@app_commands.describe(id="ID người dùng hoặc channel", message="Nội dung tin nhắn")
+async def notify(interaction: discord.Interaction, id: str, message: str):
     try:
-        # Thử gửi cho user
-        user = await bot.fetch_user(int(id))
+        user = await client.fetch_user(int(id))
         if user:
             await user.send(message)
-            await ctx.send(f"✅ Đã gửi tin nhắn tới user `{id}`.")
+            await interaction.response.send_message(f"✅ Đã gửi tin nhắn tới user `{id}`.", ephemeral=True)
             return
     except Exception:
         pass
     try:
-        # Nếu không phải user, thử gửi cho channel
-        channel = await bot.fetch_channel(int(id))
+        channel = await client.fetch_channel(int(id))
         if channel:
             await channel.send(message)
-            await ctx.send(f"✅ Đã gửi tin nhắn tới channel `{id}`.")
+            await interaction.response.send_message(f"✅ Đã gửi tin nhắn tới channel `{id}`.", ephemeral=True)
             return
     except Exception:
         pass
-    await ctx.send("❌ Không tìm thấy user hoặc channel với ID này.")
+    await interaction.response.send_message("❌ Không tìm thấy user hoặc channel với ID này.", ephemeral=True)
 
 def send_discord(message, icon=None):
-    # Danh sách icon mở rộng, đa dạng và đẹp
     icons_notify = [
         "🌸", "✨", "🎀", "💗", "🦄", "💎", "🩷", "🎉", "💖", "🌈", "🪐", "🦋", "🌟", "🍀", "🧸", "🫧", "🫶", "🧁", "🍰", "🍭", "🍬", "🧃", "🪄", "🩰", "🥰", "😻", "🦊", "🐼", "🐧", "🐣", "🦜", "🦩"
     ]
@@ -133,10 +136,10 @@ def send_discord(message, icon=None):
     elif not icon:
         if not message.startswith(tuple(icons_notify + icons_warning + icons_success + icons_stop + icons_click + icons_time)):
             message = f"{random.choice(icons_notify)} {message}"
-    asyncio.run_coroutine_threadsafe(send_private_message(message), bot.loop)
+    asyncio.run_coroutine_threadsafe(send_private_message(message), client.loop)
 
 def start_discord_bot():
-    asyncio.run(bot.start(DISCORD_BOT_TOKEN))
+    client.run(DISCORD_BOT_TOKEN)
 
 class EnterCheckBox(QCheckBox):
     def __init__(self, *args, **kwargs):
@@ -196,6 +199,7 @@ class LoginApp(QWidget):
         self.bg_label.lower()
 
         self.old_resizeEvent = self.resizeEvent
+
         def resizeEvent(event):
             self.bg_label.setPixmap(QPixmap(bg_path).scaled(self.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
             self.bg_label.setGeometry(0, 0, self.width(), self.height())
@@ -987,46 +991,52 @@ else:
     server.listen("BLACKPINK_AUTOCLICKER_SINGLE_INSTANCE")
 # --- END SINGLE INSTANCE CHECK ---
 
-@bot.command()
-async def start(ctx):
+# --- SLASH COMMANDS ---
+
+@tree.command(name="start", description="Bắt đầu auto clicker")
+async def start(interaction: discord.Interaction):
     if auto_clicker_instance:
         if auto_clicker_instance.running:
             auto_clicker_instance.set_status_signal.emit(
                 "Đã chạy rồi ní", "#e17055", True, 3000, None
             )
             send_discord("Auto clicker đã chạy rồi, không thể start tiếp!", icon="⚠️")
+            await interaction.response.send_message("⚠️ Auto clicker đã chạy rồi!", ephemeral=True)
         else:
-            auto_clicker_instance.start_clicker_signal.emit("discord")  # <-- dùng signal
+            auto_clicker_instance.start_clicker_signal.emit("discord")
+            await interaction.response.send_message("✅ Đã bắt đầu auto clicker!", ephemeral=True)
     else:
-        await ctx.send("❌ Auto clicker chưa sẵn sàng.")
+        await interaction.response.send_message("❌ Auto clicker chưa sẵn sàng.", ephemeral=True)
 
-@bot.command()
-async def stop(ctx):
+@tree.command(name="stop", description="Dừng auto clicker")
+async def stop(interaction: discord.Interaction):
     if auto_clicker_instance:
         if not auto_clicker_instance.running:
             auto_clicker_instance.set_status_signal.emit(
                 "Đã dừng rồi ní!", "#e17055", True, 3000, None
             )
             send_discord("Auto clicker đã dừng rồi, không thể stop tiếp!", icon="⚠️")
+            await interaction.response.send_message("⚠️ Auto clicker đã dừng rồi!", ephemeral=True)
         else:
             auto_clicker_instance.stop_clicker()
+            await interaction.response.send_message("🛑 Đã dừng auto clicker!", ephemeral=True)
     else:
-        await ctx.send("❌ Auto clicker chưa sẵn sàng.")
+        await interaction.response.send_message("❌ Auto clicker chưa sẵn sàng.", ephemeral=True)
 
-@bot.command()
-async def settimeout(ctx, seconds: int):
+@tree.command(name="settimeout", description="Đặt timeout (giây)")
+@app_commands.describe(seconds="Số giây timeout")
+async def settimeout(interaction: discord.Interaction, seconds: int):
     if auto_clicker_instance:
-        # --- Sửa đoạn này ---
         if seconds < 0:
             seconds = 0
         auto_clicker_instance.timeout_input.setText(str(seconds))
-        await ctx.send(f"⏱️ Timeout đã đặt thành {seconds} giây.")
-        # --- hết sửa ---
+        await interaction.response.send_message(f"⏱️ Timeout đã đặt thành {seconds} giây.", ephemeral=True)
     else:
-        await ctx.send("❌ Auto clicker chưa sẵn sàng.")
+        await interaction.response.send_message("❌ Auto clicker chưa sẵn sàng.", ephemeral=True)
 
-@bot.command()
-async def settimer(ctx, *, time_str: str):
+@tree.command(name="settimer", description="Đặt hẹn giờ tự động (HH:MM:SS)")
+@app_commands.describe(time_str="Thời gian định dạng HH:MM:SS")
+async def settimer(interaction: discord.Interaction, time_str: str):
     if auto_clicker_instance:
         try:
             import re
@@ -1037,59 +1047,62 @@ async def settimer(ctx, *, time_str: str):
                     "Đã có hẹn giờ rồi ní!", "#e17055", True, 3000, "timer"
                 )
                 send_discord("Đã có lệnh hẹn giờ, hãy huỷ trước khi đặt mới!", icon="⚠️")
+                await interaction.response.send_message("⚠️ Đã có lệnh hẹn giờ, hãy huỷ trước khi đặt mới!", ephemeral=True)
                 return
             auto_clicker_instance.set_timer_signal.emit(h, m, s)
+            await interaction.response.send_message(f"⏰ Đã đặt hẹn giờ tự động: {time_str}", ephemeral=True)
         except Exception as e:
-            await ctx.send(f"❌ Sai định dạng! Dùng HH:MM:SS\nChi tiết: {e}")
+            await interaction.response.send_message(f"❌ Sai định dạng! Dùng HH:MM:SS\nChi tiết: {e}", ephemeral=True)
     else:
-        await ctx.send("❌ Auto clicker chưa sẵn sàng.")
+        await interaction.response.send_message("❌ Auto clicker chưa sẵn sàng.", ephemeral=True)
 
-@bot.command(name="cancel")
-async def cancel_timer(ctx):
+@tree.command(name="cancel", description="Hủy hẹn giờ tự động")
+async def cancel(interaction: discord.Interaction):
     if auto_clicker_instance:
         auto_clicker_instance.cancel_timer_signal.emit()
+        await interaction.response.send_message("🚫 Đã huỷ hẹn giờ tự động!", ephemeral=True)
     else:
-        await ctx.send("❌ Auto clicker chưa sẵn sàng.")
+        await interaction.response.send_message("❌ Auto clicker chưa sẵn sàng.", ephemeral=True)
 
-@bot.command()
-async def status(ctx):
+@tree.command(name="status", description="Xem trạng thái hiện tại")
+async def status(interaction: discord.Interaction):
     if auto_clicker_instance:
         import re
         raw = auto_clicker_instance.label_status.text()
         clean = re.sub(r"<.*?>", "", raw)
         status_only = clean.split(":", 1)[-1].strip() if ":" in clean else clean.strip()
-        await ctx.send(f"📋 Trạng thái: {status_only}")
+        await interaction.response.send_message(f"📋 Trạng thái: {status_only}", ephemeral=True)
     else:
-        await ctx.send("❌ Auto clicker chưa sẵn sàng.")
+        await interaction.response.send_message("❌ Auto clicker chưa sẵn sàng.", ephemeral=True)
 
-@bot.command(name="help")
-async def custom_help(ctx):
+@tree.command(name="help", description="Hiện danh sách lệnh")
+async def help_cmd(interaction: discord.Interaction):
     help_text = (
-        "**BLACKPINK Auto Clicker Bot Commands:**\n"
-        "`!start` – Bắt đầu auto clicker\n"
-        "`!stop` – Dừng auto clicker\n"
-        "`!settimeout <giây>` – Đặt timeout (ví dụ: !settimeout 10)\n"
-        "`!settimer <HH:MM:SS>` – Đặt hẹn giờ tự động (ví dụ: !settimer 12:34:56)\n"
-        "`!cancel` – Hủy hẹn giờ tự động\n"
-        "`!status` – Xem trạng thái hiện tại\n"
-        "`!notify <tin nhắn>` – Gửi tin nhắn riêng\n"
-        "`!exit` – Tắt AutoClicker\n"
-        "`!killapp` – Tắt app ngoài (.exe) đã chọn\n"
-        "`!openapp` – Mở lại app ngoài (.exe) đã chọn\n"
-        "`!help` – Hiện danh sách lệnh\n"
+        "**BLACKPINK Auto Clicker Bot Slash Commands:**\n"
+        "`/start` – Bắt đầu auto clicker\n"
+        "`/stop` – Dừng auto clicker\n"
+        "`/settimeout <giây>` – Đặt timeout (ví dụ: /settimeout 10)\n"
+        "`/settimer <HH:MM:SS>` – Đặt hẹn giờ tự động (ví dụ: /settimer 12:34:56)\n"
+        "`/cancel` – Hủy hẹn giờ tự động\n"
+        "`/status` – Xem trạng thái hiện tại\n"
+        "`/notify <id> <tin nhắn>` – Gửi tin nhắn riêng\n"
+        "`/exit` – Tắt AutoClicker\n"
+        "`/killapp` – Tắt app ngoài (.exe) đã chọn\n"
+        "`/openapp` – Mở lại app ngoài (.exe) đã chọn\n"
+        "`/help` – Hiện danh sách lệnh\n"
     )
-    await ctx.send(help_text)
+    await interaction.response.send_message(help_text, ephemeral=True)
 
-@bot.command()
-async def exit(ctx):
+@tree.command(name="exit", description="Tắt AutoClicker")
+async def exit_cmd(interaction: discord.Interaction):
     if auto_clicker_instance:
-        await ctx.send("🔌 Đang tắt AutoClicker...")
+        await interaction.response.send_message("🔌 Đang tắt AutoClicker...", ephemeral=True)
         auto_clicker_instance.close_app()
     else:
-        await ctx.send("❌ Auto clicker chưa sẵn sàng.")
+        await interaction.response.send_message("❌ Auto clicker chưa sẵn sàng.", ephemeral=True)
 
-@bot.command()
-async def killapp(ctx):
+@tree.command(name="killapp", description="Tắt app ngoài (.exe) đã chọn")
+async def killapp(interaction: discord.Interaction):
     if auto_clicker_instance and hasattr(auto_clicker_instance, "exe_path"):
         exe_path = auto_clicker_instance.exe_path
         exe_name = os.path.basename(exe_path)
@@ -1102,26 +1115,26 @@ async def killapp(ctx):
             except Exception:
                 continue
         if killed:
-            await ctx.send(f"💀 Đã tắt app: `{exe_name}`")
+            await interaction.response.send_message(f"💀 Đã tắt app: `{exe_name}`", ephemeral=True)
         else:
-            await ctx.send(f"⚠️ Không tìm thấy hoặc không thể tắt app: `{exe_name}`")
+            await interaction.response.send_message(f"⚠️ Không tìm thấy hoặc không thể tắt app: `{exe_name}`", ephemeral=True)
     else:
-        await ctx.send("❌ Auto clicker chưa sẵn sàng.")
+        await interaction.response.send_message("❌ Auto clicker chưa sẵn sàng.", ephemeral=True)
 
-@bot.command()
-async def openapp(ctx):
+@tree.command(name="openapp", description="Mở lại app ngoài (.exe) đã chọn")
+async def openapp(interaction: discord.Interaction):
     if auto_clicker_instance and hasattr(auto_clicker_instance, "exe_path"):
         exe_path = auto_clicker_instance.exe_path
         if exe_path and os.path.isfile(exe_path):
             try:
                 subprocess.Popen(exe_path)
-                await ctx.send(f"🚀 Đã mở lại app: `{os.path.basename(exe_path)}`")
+                await interaction.response.send_message(f"🚀 Đã mở lại app: `{os.path.basename(exe_path)}`", ephemeral=True)
             except Exception as e:
-                await ctx.send(f"❌ Không thể mở app: `{exe_path}`\nLỗi: {e}")
+                await interaction.response.send_message(f"❌ Không thể mở app: `{exe_path}`\nLỗi: {e}", ephemeral=True)
         else:
-            await ctx.send("⚠️ Đường dẫn file exe không hợp lệ.")
+            await interaction.response.send_message("⚠️ Đường dẫn file exe không hợp lệ.", ephemeral=True)
     else:
-        await ctx.send("❌ Auto clicker chưa sẵn sàng.")
+        await interaction.response.send_message("❌ Auto clicker chưa sẵn sàng.", ephemeral=True)
 
 def remove_from_startup():
     startup_dir = os.path.join(os.environ["APPDATA"], "Microsoft\\Windows\\Start Menu\\Programs\\Startup")

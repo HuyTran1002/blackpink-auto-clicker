@@ -1,6 +1,6 @@
 [Setup]
 AppName=BLACKPINK Auto Clicker
-AppVersion=6.1.2
+AppVersion=6.1.5
 DefaultDirName={pf}\BLACKPINKAutoClicker
 DefaultGroupName=BLACKPINKAutoClicker
 OutputBaseFilename=BLACKPINKAutoClickerSetup
